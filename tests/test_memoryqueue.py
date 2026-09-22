@@ -103,3 +103,13 @@ def test_fragments() -> None:
 
     view = cast(memoryqueue, view[5:])
     assert len(view._views) == 5
+
+def test_buffer_protocol() -> None:
+    alphabet = b'abcdefghijklmnopqrstuvwxyz'
+    view = memoryqueue(*(batch for batch in batched(alphabet, 5)))
+
+    try:
+        buf = memoryview(view)
+        assert buf == alphabet 
+    except:
+        assert False

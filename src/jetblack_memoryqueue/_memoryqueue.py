@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections import deque
-from inspect import BufferFlags
 from typing import Any, Iterator, Sized, cast
 
 
@@ -113,7 +112,7 @@ class memoryqueue(Sized):
 
         return bytes(buf)
 
-    def __buffer__(self, flags: BufferFlags) -> memoryview:
+    def __buffer__(self, flags: int) -> memoryview:
         match len(self._views):
             case 0:
                 return memoryview(b'')
