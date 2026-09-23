@@ -1,4 +1,5 @@
 """Run on both regular and free-threaded CPython."""
+
 from concurrent.futures import ThreadPoolExecutor
 import os
 import subprocess
