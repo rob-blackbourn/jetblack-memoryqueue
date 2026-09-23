@@ -1,15 +1,22 @@
 [project]
 name = "jetblack-memoryqueue"
 version = "0.1.0"
-description = "Let's go psycho!"
+description = "A memory queue"
 authors = [{name = "Rob Blackbourn", email = "rob.blackbourn@gmail.com"}]
 readme = "README.md"
+requires-python = ">=3.12"
 
 [project.optional-dependencies]
 dev = [
     "pytest",
     "mypy",
 ]
+
+[tool.setuptools]
+ext-modules = [
+    {name = "jetblack_memoryqueue._memoryqueue", sources = ["src/jetblack_memoryqueue/_memoryqueue.c"]}
+]
+
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
