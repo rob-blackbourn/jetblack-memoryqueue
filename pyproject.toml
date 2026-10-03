@@ -12,6 +12,9 @@ dev = [
     "mypy",
 ]
 
+[project.urls]
+Repository = "https://github.com/rob-blackbourn/jetblack-memoryqueue"
+
 [build-system]
 requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
