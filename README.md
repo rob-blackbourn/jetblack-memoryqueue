@@ -54,6 +54,15 @@ Mutable inputs remain shared, and resizing an input is prevented while exported.
   return booleans and use the same bounds as searching. Accept a byte buffer or
   a tuple of alternatives; an empty tuple returns `False`, and an empty buffer
   matches even an empty range. Tuple matching stops at the first match.
+- `partition(sep)` and `rpartition(sep)` return three new queues containing
+  the bytes before, within, and after the first or last separator. They search
+  across chunks without flattening the queue. Results share the original data,
+  preserving chunk boundaries and strides, with slices only at the two cuts.
+  The separator result also views the original queue data. An empty separator
+  raises `ValueError`. If absent, `partition()` returns `(whole, empty, empty)`
+  and `rpartition()` returns `(empty, empty, whole)`.
+  Empty chunks are retained; those exactly at a cut belong to the following
+  part. The original queue is unchanged, and results survive clearing it.
 - Equality compares all bytes, independently of chunk boundaries. Queues are
   unhashable. `_views` is a read-only tuple snapshot for inspection.
 - `memoryview(queue)` works on every supported Python version. A single chunk

@@ -534,6 +534,120 @@ static int queue_contains(Queue *self, PyObject *item)
     return index != -1;
 }
 
+/* KMP carries the matched prefix across chunk boundaries and finds overlapping
+ * matches. Only the separator and its prefix table are materialized, never the
+ * queue. Return -1 for no match, or -2 on error. */
+static Py_ssize_t partition_find(PyObject *views, PyObject *needle, int last)
+{
+    Py_ssize_t size = PyBytes_GET_SIZE(needle);
+    const unsigned char *pattern = (const unsigned char *)PyBytes_AS_STRING(needle);
+    if (size > PY_SSIZE_T_MAX / (Py_ssize_t)sizeof(Py_ssize_t)) {
+        PyErr_NoMemory(); return -2;
+    }
+    Py_ssize_t *prefix = PyMem_Malloc((size_t)size * sizeof(*prefix));
+    if (!prefix) { PyErr_NoMemory(); return -2; }
+    prefix[0] = 0;
+    for (Py_ssize_t i = 1, matched = 0; i < size; ++i) {
+        while (matched && pattern[i] != pattern[matched]) matched = prefix[matched - 1];
+        if (pattern[i] == pattern[matched]) ++matched;
+        prefix[i] = matched;
+    }
+    Py_ssize_t offset = 0, matched = 0, found = -1;
+    for (Py_ssize_t n = 0; n < PyTuple_GET_SIZE(views); ++n) {
+        Py_buffer *buf = owner_buffer(PyTuple_GET_ITEM(views, n));
+        for (Py_ssize_t i = 0; i < buf->len; ++i) {
+            unsigned char value = *(unsigned char *)PyBuffer_GetPointer(buf, &i);
+            while (matched && value != pattern[matched]) matched = prefix[matched - 1];
+            if (value == pattern[matched]) ++matched;
+            if (matched == size) {
+                found = offset + i - (size - 1);
+                if (!last) { PyMem_Free(prefix); return found; }
+                matched = prefix[matched - 1];
+            }
+        }
+        offset += buf->len;
+        if (PyErr_CheckSignals() < 0) { PyMem_Free(prefix); return -2; }
+    }
+    PyMem_Free(prefix);
+    return found;
+}
+
+/* Append a whole chunk or a view of a boundary fragment, without copying data. */
+static int append_fragment(Queue *queue, PyObject *owner, Py_ssize_t start, Py_ssize_t stop)
+{
+    PyObject *ok;
+    if (start == 0 && stop == owner_buffer(owner)->len) {
+        ok = queue_append(queue, owner);
+    } else {
+        PyObject *view = PyMemoryView_FromObject(owner);
+        PyObject *part = view ? PySequence_GetSlice(view, start, stop) : NULL;
+        Py_XDECREF(view);
+        ok = part ? queue_append(queue, part) : NULL;
+        Py_XDECREF(part);
+    }
+    if (!ok) return -1;
+    Py_DECREF(ok);
+    return 0;
+}
+
+static PyObject *partition(Queue *self, PyObject *separator, int last)
+{
+    PyObject *view = byte_view(separator);
+    if (!view) return NULL;
+    PyObject *needle = PyObject_Bytes(view);
+    Py_DECREF(view);
+    if (!needle) return NULL;
+    Py_ssize_t size = PyBytes_GET_SIZE(needle);
+    if (!size) {
+        Py_DECREF(needle);
+        PyErr_SetString(PyExc_ValueError, "empty separator"); return NULL;
+    }
+    /* Search and all three results use the same snapshot, even if the queue is
+     * concurrently cleared, appended to, or reinitialized. */
+    PyObject *views = snapshot(self);
+    if (!views) { Py_DECREF(needle); return NULL; }
+    Py_ssize_t found = partition_find(views, needle, last);
+    Py_DECREF(needle);
+    if (found == -2) { Py_DECREF(views); return NULL; }
+    PyObject *result = PyTuple_New(3);
+    if (!result) { Py_DECREF(views); return NULL; }
+    for (Py_ssize_t i = 0; i < 3; ++i) {
+        PyObject *queue = PyObject_CallNoArgs((PyObject *)Py_TYPE(self));
+        if (!queue) goto error;
+        PyTuple_SET_ITEM(result, i, queue);
+    }
+    Py_ssize_t offset = 0;
+    for (Py_ssize_t n = 0; n < PyTuple_GET_SIZE(views); ++n) {
+        PyObject *owner = PyTuple_GET_ITEM(views, n);
+        Py_ssize_t length = owner_buffer(owner)->len;
+        if (found < 0) {
+            Queue *queue = (Queue *)PyTuple_GET_ITEM(result, last ? 2 : 0);
+            if (append_fragment(queue, owner, 0, length) < 0) goto error;
+        } else {
+            Py_ssize_t start = 0;
+            do {
+                Py_ssize_t position = offset + start;
+                int part = position < found ? 0 : position < found + size ? 1 : 2;
+                Py_ssize_t stop = length;
+                if (part < 2) stop = Py_MIN(length, (part == 0 ? found : found + size) - offset);
+                Queue *queue = (Queue *)PyTuple_GET_ITEM(result, part);
+                if (append_fragment(queue, owner, start, stop) < 0) goto error;
+                start = stop;
+            } while (start < length);
+        }
+        offset += length;
+    }
+    Py_DECREF(views);
+    return result;
+error:
+    Py_DECREF(views); Py_DECREF(result);
+    return NULL;
+}
+static PyObject *queue_partition(Queue *self, PyObject *separator)
+{ return partition(self, separator, 0); }
+static PyObject *queue_rpartition(Queue *self, PyObject *separator)
+{ return partition(self, separator, 1); }
+
 static PyMethodDef methods[] = {
 #if PY_VERSION_HEX < 0x030C0000
     {"__buffer__", (PyCFunction)queue_buffer_method, METH_O, "Export a buffer with the requested flags."},
@@ -549,6 +663,8 @@ static PyMethodDef methods[] = {
     {"rindex", (PyCFunction)(void(*)(void))queue_rindex, METH_VARARGS | METH_KEYWORDS, "Find the last occurrence of a byte string or raise ValueError."},
     {"startswith", (PyCFunction)(void(*)(void))queue_startswith, METH_VARARGS | METH_KEYWORDS, "Test a prefix or tuple of prefixes within optional bounds."},
     {"endswith", (PyCFunction)(void(*)(void))queue_endswith, METH_VARARGS | METH_KEYWORDS, "Test a suffix or tuple of suffixes within optional bounds."},
+    {"partition", (PyCFunction)queue_partition, METH_O, "Split at the first separator into three queues sharing the original chunks."},
+    {"rpartition", (PyCFunction)queue_rpartition, METH_O, "Split at the last separator into three queues sharing the original chunks."},
     {"equals", (PyCFunction)queue_equals, METH_VARARGS | METH_CLASS, "Compare two queues."},
     {NULL}
 };

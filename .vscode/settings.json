@@ -13,10 +13,14 @@
         "decrefs",
         "ghijk",
         "memoryqueue",
+        "memoryview",
         "ndim",
+        "popleft",
         "pycache",
         "pyenv",
+        "subclassable",
         "testpaths",
-        "venv"
+        "venv",
+        "writability"
     ]
 }

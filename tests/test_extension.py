@@ -283,3 +283,115 @@ def test_affix_keywords_and_strided_buffers():
     assert queue.endswith(suffix=needle, j=Bound()) is True
     assert queue.startswith((b'no', needle)) is True
     assert queue.endswith((b'no', needle)) is True
+
+
+@pytest.mark.parametrize('method_name', ['partition', 'rpartition'])
+@pytest.mark.parametrize('buffer_type', [bytes, bytearray, memoryview])
+@pytest.mark.parametrize('chunks', [(), (b'', b''), (b'', b'ab', b'c', b'ab', b'c', b''),
+                                    (b'a', b'aa', b'a'), (b'abab', b'abac', b'ababac')])
+def test_partition_values(chunks, buffer_type, method_name):
+    queue = memoryqueue(*chunks)
+    data = b''.join(chunks)
+    for separator in [b'a', b'aa', b'aaa', b'abc', b'bcab', b'ababac', b'abcabc', b'z', b'abcdefghijk']:
+        parts = getattr(queue, method_name)(buffer_type(separator))
+        assert isinstance(parts, tuple)
+        assert len(parts) == 3
+        assert all(isinstance(part, memoryqueue) for part in parts)
+        assert tuple(map(bytes, parts)) == getattr(
+            data, method_name)(separator)
+        assert bytes(queue) == data
+        assert [bytes(chunk) for chunk in queue.items()] == list(chunks)
+    with pytest.raises(ValueError, match='empty separator'):
+        getattr(queue, method_name)(buffer_type(b''))
+    for invalid in ['abc', 1, (b'a',), None]:
+        with pytest.raises(TypeError):
+            getattr(queue, method_name)(invalid)
+
+
+@pytest.mark.parametrize('method_name', ['partition', 'rpartition'])
+def test_partition_preserves_chunks_and_shares_all_parts(method_name):
+    chunks = [bytearray(part) for part in [b'ab', b'c<', b'=>', b'de', b'f']]
+    queue = memoryqueue(*chunks)
+    separator = bytearray(b'<=>')
+    before, middle, after = getattr(queue, method_name)(separator)
+    assert [[bytes(chunk) for chunk in part.items()] for part in (before, middle, after)] == [
+        [b'ab', b'c'], [b'<', b'=>'], [b'de', b'f']]
+    separator[:] = b'!!!'
+    assert bytes(middle) == b'<=>'
+    chunks[0][0] = ord('A')
+    chunks[1][1] = ord('[')
+    chunks[2][1] = ord(']')
+    chunks[4][0] = ord('F')
+    assert tuple(map(bytes, (before, middle, after))
+                 ) == (b'Abc', b'[=]', b'deF')
+    next(after.items())[0] = ord('D')
+    assert chunks[3] == b'De'
+    queue.clear()
+    del queue, chunks
+    gc.collect()
+    assert tuple(map(bytes, (before, middle, after))
+                 ) == (b'Abc', b'[=]', b'DeF')
+    before.clear()
+    assert bytes(middle) == b'[=]'
+
+
+@pytest.mark.parametrize('method_name', ['partition', 'rpartition'])
+def test_partition_strides_and_empty_chunks(method_name):
+    queue = memoryqueue(b'', memoryview(b'a_b_c')[::2], b'', b'<', b'', b'=>', b'',
+                        memoryview(b'f_e_d')[::-2], b'')
+    parts = getattr(queue, method_name)(memoryview(b'<_=_>')[::2])
+    assert [[bytes(chunk) for chunk in part.items()] for part in parts] == [
+        [b'', b'abc'], [b'', b'<', b'', b'=>'], [b'', b'def', b'']]
+    assert list(parts[0].items())[1].strides == (2,)
+    assert list(parts[2].items())[1].strides == (-2,)
+    absent = getattr(queue, method_name)(b'missing')
+    whole = absent[0 if method_name == 'partition' else 2]
+    assert whole is not queue
+    assert [bytes(chunk) for chunk in whole.items()] == [
+        bytes(chunk) for chunk in queue.items()]
+    # Both cuts within one strided source chunk must also remain views.
+    source = bytearray(b'a_b_c_d_e')
+    queue = memoryqueue(memoryview(source)[::2])
+    parts = getattr(queue, method_name)(b'bc')
+    assert tuple(map(bytes, parts)) == (b'a', b'bc', b'de')
+    assert [next(part.items()).strides for part in parts] == [(2,), (2,), (2,)]
+    source[2] = ord('B')
+    assert bytes(parts[1]) == b'Bc'
+
+
+@pytest.mark.parametrize('method_name', ['partition', 'rpartition'])
+def test_partition_does_not_materialize_queue(method_name):
+    import tracemalloc
+
+    # A large logical queue backed by one reused buffer makes any temporary
+    # flattening visible without allocating a large input for the test itself.
+    queue = memoryqueue(*([b'x' * (256 * 1024)] * 32))
+    tracemalloc.start()
+    try:
+        parts = getattr(queue, method_name)(b'z')
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert peak < len(queue) // 4
+    whole = parts[0 if method_name == 'partition' else 2]
+    assert len(whole) == len(queue)
+    assert len(list(whole.items())) == 32
+
+
+def test_partition_uses_one_snapshot():
+    queue = memoryqueue(b'aa:', b':bb')
+    barrier = Barrier(4)
+
+    def worker(worker_id):
+        barrier.wait()
+        for _ in range(300):
+            if worker_id == 0:
+                queue.__init__(b'aa:', b':bb')
+                queue.__init__(b'cc', b'::', b'dd')
+            else:
+                for method in [queue.partition, queue.rpartition]:
+                    assert tuple(map(bytes, method(b'::'))) in [
+                        (b'aa', b'::', b'bb'), (b'cc', b'::', b'dd')]
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(worker, range(4)))

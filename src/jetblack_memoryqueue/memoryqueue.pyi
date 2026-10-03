@@ -43,3 +43,9 @@ class memoryqueue:
 
     def endswith(self, suffix: bytes | bytearray | memoryview |
                  tuple[bytes | bytearray | memoryview, ...], i: SupportsIndex | None = None, j: SupportsIndex | None = None) -> bool: ...
+
+    def partition(self, sep: bytes | bytearray | memoryview, /
+                  ) -> tuple[memoryqueue, memoryqueue, memoryqueue]: ...
+
+    def rpartition(self, sep: bytes | bytearray | memoryview, /
+                   ) -> tuple[memoryqueue, memoryqueue, memoryqueue]: ...
