@@ -1,3 +1,3 @@
-from ._memoryqueue import memoryqueue
+from .memoryqueue import memoryqueue
 
 __all__ = ["memoryqueue"]

@@ -1,9 +1,12 @@
-from typing import cast, Iterator
+from typing import cast, Iterator, TypeVar
 
 from jetblack_memoryqueue import memoryqueue
 
 
-def batched[T: (str, bytes, bytearray)](buf: T, n: int) -> Iterator[T]:
+T = TypeVar("T", str, bytes, bytearray)
+
+
+def batched(buf: T, n: int) -> Iterator[T]:
     return (
         buf[0+i:n+i]
         for i in range(0, len(buf), n)
@@ -27,6 +30,7 @@ def test_points() -> None:
         expected = alphabet[i]
         assert actual == expected, msg
 
+
 def test_slices() -> None:
     alphabet = b'abcdefghijklmnopqrstuvwxyz'
     view = memoryqueue(*(batch for batch in batched(alphabet, 5)))
@@ -46,6 +50,7 @@ def test_slices() -> None:
         expected = alphabet[i]
         assert actual == expected, msg
 
+
 def test_steps() -> None:
     alphabet = b'abcdefghijklmnopqrstuvwxyz'
     view = memoryqueue(*(batch for batch in batched(alphabet, 5)))
@@ -62,9 +67,11 @@ def test_steps() -> None:
         actual = bytes(view[i])
         assert actual == expected, msg
 
+
 def test_equals() -> None:
     assert memoryqueue(b'abc', b'def') == memoryqueue(b'ab', b'cd', b'ef')
     assert memoryqueue(b'ab', b'cd', b'ef') == memoryqueue(b'abc', b'def')
+
 
 def test_mutate() -> None:
     first = b'abcdef'
@@ -83,10 +90,12 @@ def test_mutate() -> None:
     assert buf == second
     assert len(view) == 0
 
+
 def test_empty() -> None:
     view = memoryqueue()
     assert len(view) == 0
     assert len(cast(memoryqueue, view[:])) == 0
+
 
 def test_find() -> None:
     alphabet = b'abcdefghijklmnopqrstuvwxyz'
@@ -94,6 +103,7 @@ def test_find() -> None:
 
     index = view.find(b'defgh')
     assert index == 3
+
 
 def test_fragments() -> None:
     alphabet = b'abcdefghijklmnopqrstuvwxyz'
@@ -104,12 +114,29 @@ def test_fragments() -> None:
     view = cast(memoryqueue, view[5:])
     assert len(view._views) == 5
 
+
 def test_buffer_protocol() -> None:
     alphabet = b'abcdefghijklmnopqrstuvwxyz'
     view = memoryqueue(*(batch for batch in batched(alphabet, 5)))
 
     try:
         buf = memoryview(view)
-        assert buf == alphabet 
+        assert buf == alphabet
     except:
         assert False
+
+
+def test_iter() -> None:
+    alphabet = b'abcdefghijklmnopqrstuvwxyz'
+    view = memoryqueue(*(batch for batch in batched(alphabet, 5)))
+
+    for actual, expected in zip(alphabet, view):
+        assert actual == expected
+
+
+def test_items() -> None:
+    alphabet = b'abcdefghijklmnopqrstuvwxyz'
+    batches = [batch for batch in batched(alphabet, 5)]
+    view = memoryqueue(*batches)
+    for actual, expected in zip(batches, view.items()):
+        assert actual == expected

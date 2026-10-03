@@ -1,66 +1,79 @@
 # jetblack-memoryqueue
 
-A CPython C extension implementing a queue of byte-buffer fragments.
+A C extension for CPython 3.11 and later that stores incoming byte buffers as
+chunks and exposes them as one byte sequence. Appending and popping chunks take
+constant time and do not copy the underlying data. Contiguous slices also share
+the original buffers; stepped slices, searching, equality, and `bytes(queue)`
+materialize bytes.
 
 ```python
 from jetblack_memoryqueue import memoryqueue
 
-queue = memoryqueue(b'hello', bytearray(b' world'))
-queue.append(b'!')
-assert bytes(queue[3:8]) == b'lo wo'
-assert queue.find(b'o w') == 4
-assert bytes(memoryview(queue)) == b'hello world!'
+queue = memoryqueue(b"abc", b"def")
+queue.append(b"ghi")
+assert queue[3] == ord("d")
+assert bytes(queue[2:5]) == b"cde"
+assert queue.find(b"cde") == 2
+assert queue.popleft().tobytes() == b"abc"
 ```
 
-Install with `python -m pip install .`. Building requires a C compiler,
-CPython development headers, and setuptools. For development:
+## Building
+
+A C compiler and Python development headers are required to build from source.
+The extension is configured entirely through `[tool.setuptools].ext-modules` in
+`pyproject.toml`; there is no `setup.py` or Python fallback.
 
 ```sh
-python -m pip install -e '.[dev]'
+python -m pip install .
+# Development:
+python -m pip install -e '.[dev]' build
 python -m pytest
+python -m mypy
+python -m build
 ```
 
-The public `memoryqueue` class uses the native implementation. Type stubs are included.
+The package includes `.pyi` stubs and a `py.typed` marker.
 
-Construction and `append` accept one-dimensional unsigned-byte buffers
-(format `B`), including strided memoryviews. Fragments retain their exporters;
-ordinary slices share their storage. Stepped slices copy. Iteration yields a
-snapshot of the fragment memoryviews; `popleft()` removes the first fragment.
-`_views` is a read-only property returning a snapshot.
+## Buffer and sequence behavior
 
-Indexing, slicing, equality, `find`, and `index` follow bytes semantics,
-including empty inputs and negative search bounds. Search and equality
-currently materialize bytes. Removing the first fragment takes linear time in
-the number of fragments.
+Inputs must expose a one-dimensional unsigned-byte buffer (format `B`), such as
+`bytes`, `bytearray`, or a byte-oriented `memoryview`. Strided byte views are
+supported. Cast typed contiguous views with `view.cast('B')` before appending.
+Mutable inputs remain shared, and resizing an input is prevented while exported.
 
-A buffer export of a single fragment shares that fragment, including its
-writability and strides. Exporting multiple fragments coalesces the queue into
-one immutable bytes buffer. Existing exports remain valid after queue mutation.
-`bytes(queue)` always returns the concatenated contents without coalescing the
-queue.
+- Integer indexing and slicing follow normal Python sequence bounds and steps.
+- `items()` and iteration snapshot the chunks when called. Later appends, pops,
+  and clears do not invalidate them. Changes to shared data remain visible.
+- `popleft()` returns a memoryview and raises `IndexError` on an empty queue.
+- `find(item, i=None, j=None)` returns the first match or `-1`; `index()` raises
+  `ValueError` when absent. Bounds must satisfy `0 <= i <= j <= len(queue)`.
+  An empty needle matches at `i`. Containment searches for a byte string.
+- Equality compares all bytes, independently of chunk boundaries. Queues are
+  unhashable. `_views` is a read-only tuple snapshot for inspection.
+- `memoryview(queue)` works on every supported Python version. A single chunk
+  is exported without copying and preserves its writability and strides.
+  Multiple chunks produce an immutable contiguous snapshot without changing
+  the queue. Existing exports survive `clear()` and `popleft()`.
 
-Regular CPython 3.12+ and free-threaded CPython 3.14 are supported. Support is
-selected automatically when building with a free-threaded interpreter; importing
-the extension does not enable the GIL. Build separately for each interpreter ABI:
+This fixes the former Python implementation's empty-queue, out-of-range slicing,
+prefix-equality, and `index()` edge cases. The type is not subclassable.
+
+## Free-threaded Python
+
+Build and install with a free-threaded CPython 3.14+ interpreter to opt in:
 
 ```sh
-python3.14t -m venv .venv-ft
-.venv-ft/bin/python -m pip install -e '.[dev]'
-.venv-ft/bin/python -X gil=0 -m pytest
+python3.14t -m pip install .
+python3.14t -X gil=0 -m pytest
 ```
 
-Free-threaded builds use a per-queue mutex for fragment and length updates.
-Reads capture a consistent snapshot of fragment references (O(number of
-fragments) temporary storage); they do not copy the underlying buffer contents
-unless the operation already requires it. Buffer exports remain valid during
-mutation; coalescing is published only if the captured fragments are unchanged.
-Comparisons capture each queue separately. Sequences of calls, such as checking
-`len(queue)` before `popleft()`, require an application lock if they must be atomic.
+These builds advertise that they do not require the GIL. Per-queue mutexes protect
+chunk ownership and counters; readers take a consistent chunk snapshot. Regular
+CPython builds work without any configuration. CPython 3.13 free-threaded builds
+retain the GIL when importing the extension. Wheels must be built separately for
+each Python version and for regular versus free-threaded interpreters.
 
-Mutable exporters remain shared: callers must synchronize writes to bytearrays
-or writable memoryviews with queue reads. The queue lock protects queue structure,
-not externally owned buffer contents. Caller-owned memoryviews and their derived
-views also require external synchronization when creating or releasing views
-across threads, because CPython 3.14 shares unsynchronized managed-buffer state.
-Use bytes/bytearray exporters directly when sharing inputs across worker threads.
-Regular builds retain GIL-based locking.
+Individual queue operations are safe concurrently; compound operations such as
+checking length and then popping need caller synchronization. Callers must also
+synchronize writes to shared mutable input buffers. Comparisons of two queues
+snapshot each queue separately.

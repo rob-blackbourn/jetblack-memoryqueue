@@ -83,7 +83,7 @@ celerybeat-schedule
 
 # Environments
 .env
-.venv
+.venv*
 env/
 venv/
 ENV/
@@ -107,6 +107,6 @@ venv.bak/
 .idea/
 
 # VSCode settings
-.vscode/
+#.vscode/
 
 tmp/
