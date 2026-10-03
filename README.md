@@ -2,9 +2,7 @@
 
 A C extension for CPython 3.11 and later that stores incoming byte buffers as
 chunks and exposes them as one byte sequence. Appending and popping chunks take
-constant time and do not copy the underlying data. Contiguous slices also share
-the original buffers; stepped slices, searching, equality, and `bytes(queue)`
-materialize bytes.
+constant time and does not copy the underlying data.
 
 ```python
 from jetblack_memoryqueue import memoryqueue
