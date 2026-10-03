@@ -19,6 +19,17 @@ Repository = "https://github.com/rob-blackbourn/jetblack-memoryqueue"
 requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+ext-modules = [
+    {name = "jetblack_memoryqueue.memoryqueue", sources = ["src/jetblack_memoryqueue/memoryqueue.c"]},
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+jetblack_memoryqueue = ["*.pyi", "py.typed"]
+
 # pytest
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -30,14 +41,3 @@ files = [ "src", "tests", "examples" ]
 [[tool.mypy.overrides]]
 module = "pytest"
 ignore_missing_imports = true
-
-[tool.setuptools]
-ext-modules = [
-    {name = "jetblack_memoryqueue.memoryqueue", sources = ["src/jetblack_memoryqueue/memoryqueue.c"]},
-]
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
-[tool.setuptools.package-data]
-jetblack_memoryqueue = ["*.pyi", "py.typed"]
