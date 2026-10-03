@@ -47,7 +47,9 @@ Mutable inputs remain shared, and resizing an input is prevented while exported.
 - `popleft()` returns a memoryview and raises `IndexError` on an empty queue.
 - `find(item, i=None, j=None)` returns the first match or `-1`; `index()` raises
   `ValueError` when absent. Bounds must satisfy `0 <= i <= j <= len(queue)`.
-  An empty needle matches at `i`. Containment searches for a byte string.
+  `rfind()` and `rindex()` use the same bounds and return the last match.
+  An empty needle matches at `i` for forward searches and `j` for reverse
+  searches. Containment searches for a byte string.
 - Equality compares all bytes, independently of chunk boundaries. Queues are
   unhashable. `_views` is a read-only tuple snapshot for inspection.
 - `memoryview(queue)` works on every supported Python version. A single chunk

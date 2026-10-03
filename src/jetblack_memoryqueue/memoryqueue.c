@@ -446,7 +446,7 @@ static PyObject *queue_equals(PyObject *cls, PyObject *args)
     return queue_compare(lhs, rhs, Py_EQ);
 }
 
-static PyObject *search(Queue *self, PyObject *args, PyObject *kwargs, int raise)
+static PyObject *search(Queue *self, PyObject *args, PyObject *kwargs, const char *method)
 {
     static char *names[] = {"item", "i", "j", NULL};
     PyObject *item, *i = Py_None, *j = Py_None;
@@ -467,19 +467,23 @@ static PyObject *search(Queue *self, PyObject *args, PyObject *kwargs, int raise
     if (start < 0 || start > PyBytes_GET_SIZE(data) || stop < start || stop > PyBytes_GET_SIZE(data))
         PyErr_SetString(PyExc_ValueError, "invalid search bounds");
     else
-        result = PyObject_CallMethod(data, raise ? "index" : "find", "Onn", needle, start, stop);
+        result = PyObject_CallMethod(data, method, "Onn", needle, start, stop);
     Py_DECREF(data); Py_DECREF(needle);
     return result;
 }
 static PyObject *queue_find(Queue *self, PyObject *args, PyObject *kwargs)
-{ return search(self, args, kwargs, 0); }
+{ return search(self, args, kwargs, "find"); }
 static PyObject *queue_index(Queue *self, PyObject *args, PyObject *kwargs)
-{ return search(self, args, kwargs, 1); }
+{ return search(self, args, kwargs, "index"); }
+static PyObject *queue_rfind(Queue *self, PyObject *args, PyObject *kwargs)
+{ return search(self, args, kwargs, "rfind"); }
+static PyObject *queue_rindex(Queue *self, PyObject *args, PyObject *kwargs)
+{ return search(self, args, kwargs, "rindex"); }
 static int queue_contains(Queue *self, PyObject *item)
 {
     PyObject *args = PyTuple_Pack(1, item);
     if (!args) return -1;
-    PyObject *result = search(self, args, NULL, 0);
+    PyObject *result = search(self, args, NULL, "find");
     Py_DECREF(args);
     if (!result) return -1;
     Py_ssize_t index = PyLong_AsSsize_t(result);
@@ -498,6 +502,8 @@ static PyMethodDef methods[] = {
     {"__bytes__", (PyCFunction)queue_bytes, METH_NOARGS, "Copy the queued bytes."},
     {"find", (PyCFunction)(void(*)(void))queue_find, METH_VARARGS | METH_KEYWORDS, "Find a byte string within optional bounds."},
     {"index", (PyCFunction)(void(*)(void))queue_index, METH_VARARGS | METH_KEYWORDS, "Find a byte string or raise ValueError."},
+    {"rfind", (PyCFunction)(void(*)(void))queue_rfind, METH_VARARGS | METH_KEYWORDS, "Find the last occurrence of a byte string within optional bounds."},
+    {"rindex", (PyCFunction)(void(*)(void))queue_rindex, METH_VARARGS | METH_KEYWORDS, "Find the last occurrence of a byte string or raise ValueError."},
     {"equals", (PyCFunction)queue_equals, METH_VARARGS | METH_CLASS, "Compare two queues."},
     {NULL}
 };

@@ -146,8 +146,10 @@ def test_concurrent_append_pop_and_snapshots():
         return popped
 
     with ThreadPoolExecutor(max_workers=8) as pool:
-        popped = list(itertools.chain.from_iterable(pool.map(worker, range(8))))
-    assert sorted(popped) == sorted(bytes([i]) for i in range(8) for _ in range(300))
+        popped = list(itertools.chain.from_iterable(
+            pool.map(worker, range(8))))
+    assert sorted(popped) == sorted(bytes([i])
+                                    for i in range(8) for _ in range(300))
     assert len(queue) == 0
 
 
@@ -192,3 +194,48 @@ def test_concurrent_clear_and_reinitialize():
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(worker, range(4)))
     assert len(queue) == len(bytes(queue))
+
+
+@pytest.mark.parametrize('chunks', [(), (b'',), (b'', b'ab', b'cab', b'c', b''),
+                                    (b'a', b'aa', b'a')])
+@pytest.mark.parametrize('buffer_type', [bytes, bytearray, memoryview])
+def test_reverse_search(chunks, buffer_type):
+    queue = memoryqueue(*chunks)
+    data = b''.join(chunks)
+    for raw in [b'', b'a', b'aa', b'abc', b'bca', b'abcabc', b'abcdefg', b'z']:
+        item = buffer_type(raw)
+        assert queue.rfind(item) == data.rfind(raw)
+        assert queue.rfind(item, None, None) == data.rfind(raw)
+        for start in range(len(data) + 1):
+            for stop in range(start, len(data) + 1):
+                expected = data.rfind(raw, start, stop)
+                assert queue.rfind(item=item, i=start, j=stop) == expected
+                if expected == -1:
+                    with pytest.raises(ValueError):
+                        queue.rindex(item, start, stop)
+                else:
+                    assert queue.rindex(item=item, i=start, j=stop) == expected
+        if raw in data:
+            assert queue.rindex(item) == data.rindex(raw)
+            assert queue.rindex(item, None, None) == data.rindex(raw)
+        else:
+            with pytest.raises(ValueError):
+                queue.rindex(item)
+    for method in [queue.rfind, queue.rindex]:
+        for bounds in [(-1, len(data)), (0, len(data) + 1), (1, 0)]:
+            with pytest.raises(ValueError):
+                method(b'a', *bounds)
+        with pytest.raises(TypeError):
+            method('text')
+
+
+def test_reverse_search_index_protocol_and_strided_needle():
+    class Bound:
+        def __index__(self):
+            return 3
+
+    queue = memoryqueue(b'ab', b'cab', b'c')
+    needle = memoryview(b'a-b-c')[::2]
+    for method in [queue.rfind, queue.rindex]:
+        assert method(needle, Bound()) == 3
+        assert method(needle, j=Bound()) == 0
