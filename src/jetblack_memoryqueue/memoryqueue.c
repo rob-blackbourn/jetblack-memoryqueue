@@ -446,6 +446,25 @@ static PyObject *queue_equals(PyObject *cls, PyObject *args)
     return queue_compare(lhs, rhs, Py_EQ);
 }
 
+static PyObject *bounded_bytes(Queue *self, PyObject *i, PyObject *j,
+                               Py_ssize_t *start, Py_ssize_t *stop)
+{
+    *start = 0;
+    *stop = PY_SSIZE_T_MAX;
+    if (i != Py_None) *start = PyNumber_AsSsize_t(i, PyExc_OverflowError);
+    if (!PyErr_Occurred() && j != Py_None) *stop = PyNumber_AsSsize_t(j, PyExc_OverflowError);
+    if (PyErr_Occurred()) return NULL;
+    PyObject *data = queue_bytes(self, NULL);
+    if (!data) return NULL;
+    if (j == Py_None) *stop = PyBytes_GET_SIZE(data);
+    if (*start < 0 || *start > PyBytes_GET_SIZE(data) || *stop < *start || *stop > PyBytes_GET_SIZE(data)) {
+        Py_DECREF(data);
+        PyErr_SetString(PyExc_ValueError, "invalid search bounds");
+        return NULL;
+    }
+    return data;
+}
+
 static PyObject *search(Queue *self, PyObject *args, PyObject *kwargs, const char *method)
 {
     static char *names[] = {"item", "i", "j", NULL};
@@ -456,21 +475,45 @@ static PyObject *search(Queue *self, PyObject *args, PyObject *kwargs, const cha
     PyObject *needle = PyObject_Bytes(view);
     Py_DECREF(view);
     if (!needle) return NULL;
-    Py_ssize_t start = 0, stop = PY_SSIZE_T_MAX;
-    if (i != Py_None) start = PyNumber_AsSsize_t(i, PyExc_OverflowError);
-    if (!PyErr_Occurred() && j != Py_None) stop = PyNumber_AsSsize_t(j, PyExc_OverflowError);
-    if (PyErr_Occurred()) { Py_DECREF(needle); return NULL; }
-    PyObject *data = queue_bytes(self, NULL);
-    if (!data) { Py_DECREF(needle); return NULL; }
-    if (j == Py_None) stop = PyBytes_GET_SIZE(data);
-    PyObject *result = NULL;
-    if (start < 0 || start > PyBytes_GET_SIZE(data) || stop < start || stop > PyBytes_GET_SIZE(data))
-        PyErr_SetString(PyExc_ValueError, "invalid search bounds");
-    else
-        result = PyObject_CallMethod(data, method, "Onn", needle, start, stop);
-    Py_DECREF(data); Py_DECREF(needle);
+    Py_ssize_t start, stop;
+    PyObject *data = bounded_bytes(self, i, j, &start, &stop);
+    PyObject *result = data ? PyObject_CallMethod(data, method, "Onn", needle, start, stop) : NULL;
+    Py_XDECREF(data); Py_DECREF(needle);
     return result;
 }
+
+static PyObject *affix_match(Queue *self, PyObject *args, PyObject *kwargs, int suffix)
+{
+    static char *prefix_names[] = {"prefix", "i", "j", NULL};
+    static char *suffix_names[] = {"suffix", "i", "j", NULL};
+    PyObject *item, *i = Py_None, *j = Py_None;
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OO",
+                                    suffix ? suffix_names : prefix_names,
+                                    &item, &i, &j)) return NULL;
+    Py_ssize_t start, stop;
+    PyObject *data = bounded_bytes(self, i, j, &start, &stop);
+    if (!data) return NULL;
+    int tuple = PyTuple_Check(item);
+    Py_ssize_t count = tuple ? PyTuple_GET_SIZE(item) : 1;
+    for (Py_ssize_t n = 0; n < count; ++n) {
+        PyObject *candidate = tuple ? PyTuple_GET_ITEM(item, n) : item;
+        PyObject *view = byte_view(candidate);
+        PyObject *needle = view ? PyObject_Bytes(view) : NULL;
+        Py_XDECREF(view);
+        PyObject *result = needle ? PyObject_CallMethod(
+            data, suffix ? "endswith" : "startswith", "Onn", needle, start, stop) : NULL;
+        Py_XDECREF(needle);
+        /* Like bytes, stop at the first match without inspecting later items. */
+        if (!result || result == Py_True) { Py_DECREF(data); return result; }
+        Py_DECREF(result);
+    }
+    Py_DECREF(data);
+    Py_RETURN_FALSE;
+}
+static PyObject *queue_startswith(Queue *self, PyObject *args, PyObject *kwargs)
+{ return affix_match(self, args, kwargs, 0); }
+static PyObject *queue_endswith(Queue *self, PyObject *args, PyObject *kwargs)
+{ return affix_match(self, args, kwargs, 1); }
 static PyObject *queue_find(Queue *self, PyObject *args, PyObject *kwargs)
 { return search(self, args, kwargs, "find"); }
 static PyObject *queue_index(Queue *self, PyObject *args, PyObject *kwargs)
@@ -504,6 +547,8 @@ static PyMethodDef methods[] = {
     {"index", (PyCFunction)(void(*)(void))queue_index, METH_VARARGS | METH_KEYWORDS, "Find a byte string or raise ValueError."},
     {"rfind", (PyCFunction)(void(*)(void))queue_rfind, METH_VARARGS | METH_KEYWORDS, "Find the last occurrence of a byte string within optional bounds."},
     {"rindex", (PyCFunction)(void(*)(void))queue_rindex, METH_VARARGS | METH_KEYWORDS, "Find the last occurrence of a byte string or raise ValueError."},
+    {"startswith", (PyCFunction)(void(*)(void))queue_startswith, METH_VARARGS | METH_KEYWORDS, "Test a prefix or tuple of prefixes within optional bounds."},
+    {"endswith", (PyCFunction)(void(*)(void))queue_endswith, METH_VARARGS | METH_KEYWORDS, "Test a suffix or tuple of suffixes within optional bounds."},
     {"equals", (PyCFunction)queue_equals, METH_VARARGS | METH_CLASS, "Compare two queues."},
     {NULL}
 };

@@ -239,3 +239,47 @@ def test_reverse_search_index_protocol_and_strided_needle():
     for method in [queue.rfind, queue.rindex]:
         assert method(needle, Bound()) == 3
         assert method(needle, j=Bound()) == 0
+
+
+@pytest.mark.parametrize('chunks', [(), (b'',), (b'', b'ab', b'cab', b'c', b'')])
+@pytest.mark.parametrize('buffer_type', [bytes, bytearray, memoryview])
+@pytest.mark.parametrize('method_name', ['startswith', 'endswith'])
+def test_affix_matching(chunks, buffer_type, method_name):
+    queue = memoryqueue(*chunks)
+    data = b''.join(chunks)
+    method = getattr(queue, method_name)
+    expected_method = getattr(data, method_name)
+    for raw in [b'', b'a', b'c', b'abc', b'bca', b'abcabc', b'abcdefg', b'z']:
+        item = buffer_type(raw)
+        assert method(item) is expected_method(raw)
+        assert method(item, None, None) is expected_method(raw)
+        for start in range(len(data) + 1):
+            for stop in range(start, len(data) + 1):
+                assert method(item, i=start, j=stop) is expected_method(
+                    raw, start, stop)
+    for alternatives in [(), (b'no', b'abc'), (b'abc', b'no'), (b'z', b''), (b'no', b'way')]:
+        items = tuple(buffer_type(item) for item in alternatives)
+        for start in range(len(data) + 1):
+            for stop in range(start, len(data) + 1):
+                assert method(items, start, stop) is expected_method(
+                    alternatives, start, stop)
+    for bounds in [(-1, len(data)), (0, len(data) + 1), (1, 0)]:
+        with pytest.raises(ValueError):
+            method(b'', *bounds)
+    for invalid in ['text', [b'abc'], (b'no', object()), ((b'abc',),)]:
+        with pytest.raises(TypeError):
+            method(invalid)
+    assert method((b'', object())) is True
+
+
+def test_affix_keywords_and_strided_buffers():
+    class Bound:
+        def __index__(self):
+            return 3
+
+    queue = memoryqueue(b'ab', b'cab', b'c')
+    needle = memoryview(b'a-b-c')[::2]
+    assert queue.startswith(prefix=needle, i=Bound()) is True
+    assert queue.endswith(suffix=needle, j=Bound()) is True
+    assert queue.startswith((b'no', needle)) is True
+    assert queue.endswith((b'no', needle)) is True

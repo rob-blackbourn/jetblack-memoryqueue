@@ -37,3 +37,9 @@ class memoryqueue:
 
     def rindex(self, item: bytes | bytearray | memoryview, i: SupportsIndex |
                None = None, j: SupportsIndex | None = None) -> int: ...
+
+    def startswith(self, prefix: bytes | bytearray | memoryview |
+                   tuple[bytes | bytearray | memoryview, ...], i: SupportsIndex | None = None, j: SupportsIndex | None = None) -> bool: ...
+
+    def endswith(self, suffix: bytes | bytearray | memoryview |
+                 tuple[bytes | bytearray | memoryview, ...], i: SupportsIndex | None = None, j: SupportsIndex | None = None) -> bool: ...

@@ -50,6 +50,10 @@ Mutable inputs remain shared, and resizing an input is prevented while exported.
   `rfind()` and `rindex()` use the same bounds and return the last match.
   An empty needle matches at `i` for forward searches and `j` for reverse
   searches. Containment searches for a byte string.
+- `startswith(prefix, i=None, j=None)` and `endswith(suffix, i=None, j=None)`
+  return booleans and use the same bounds as searching. Accept a byte buffer or
+  a tuple of alternatives; an empty tuple returns `False`, and an empty buffer
+  matches even an empty range. Tuple matching stops at the first match.
 - Equality compares all bytes, independently of chunk boundaries. Queues are
   unhashable. `_views` is a read-only tuple snapshot for inspection.
 - `memoryview(queue)` works on every supported Python version. A single chunk
