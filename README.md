@@ -21,7 +21,7 @@ if i != -1:
     data = data[i+2:] # memory allocation
 ```
 
-With a memory queue the block is wrapped in a memoryview and appended to an
+With a memory queue each block is wrapped in a memoryview and appended to an
 internal queue.
 
 ```python
@@ -32,9 +32,12 @@ data = memoryqueue
 data += read_block() # wrapped in memoryview and appended to internal queue.
 i = data.index(b`\n\r')
 if i != -1:
-    line = data[:i+2] # memory allocation
+    line = bytes(data[:i+2]) # memory allocation
     data = data[i+2:] # could drop a memoryview if i+2 is more than it's length.
 ```
+
+The means the memory allocation of the bytes only happens when requested with
+the `bytes` call.
 
 ## Example
 
