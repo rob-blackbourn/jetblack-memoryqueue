@@ -15,6 +15,7 @@ $(INSTALL_TARGETS): install-%: .venv-%
 	$</bin/python -m pip install -e '.[dev]'
 
 build: $(BUILD_TARGETS)
+	auditwheel repair dist/*.whl
 	@echo "Build complete."
 
 $(BUILD_TARGETS): build-%: .venv-%
@@ -27,6 +28,15 @@ $(VENVS): .venv-%:
 	$@/bin/python -m pip install --upgrade pip
 
 clean:
-	rm -rf .venv* .mypy_cache .pytest_cache .python-version build dist \
-		src/*.egg-info src/jetblack_memoryqueue/__pycache__ \
-		tests/__pycache__ src/jetblack_memoryqueue/*.so
+	rm -rf \
+		.venv* \
+		.mypy_cache \
+		.pytest_cache \
+		.python-version \
+		build \
+		dist \
+		wheelhouse \
+		src/*.egg-info \
+		src/jetblack_memoryqueue/__pycache__ \
+		tests/__pycache__ \
+		src/jetblack_memoryqueue/*.so

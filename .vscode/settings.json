@@ -8,13 +8,30 @@
         "editor.rulers": [80],
         "editor.wordBasedSuggestions": "off"
     },
+    "[markdown]": {
+        "editor.unicodeHighlight.ambiguousCharacters": false,
+        "editor.unicodeHighlight.invisibleCharacters": false,
+        "diffEditor.ignoreTrimWhitespace": false,
+        "editor.wordWrap": "on",
+        "editor.quickSuggestions": {
+            "comments": "off",
+            "strings": "off",
+            "other": "off"
+        },
+        "editor.rulers": [80],
+        "cSpell.fixSpellingWithRenameProvider": true,
+        "cSpell.advanced.feature.useReferenceProviderWithRename": true,
+        "cSpell.advanced.feature.useReferenceProviderRemove": "/^#+\\s/"
+    },
     "cSpell.words": [
+        "auditwheel",
         "DECREF",
         "decrefs",
         "ghijk",
         "memoryqueue",
         "memoryview",
         "ndim",
+        "patchelf",
         "popleft",
         "pycache",
         "pyenv",
