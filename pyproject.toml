@@ -1,6 +1,6 @@
 [project]
 name = "jetblack-memoryqueue"
-version = "0.1.0"
+version = "0.2.0"
 description = "An implementation of a memory queue"
 authors = [{name = "Rob Blackbourn", email = "rob.blackbourn@gmail.com"}]
 readme = "README.md"
