@@ -1,8 +1,20 @@
 # jetblack-memoryqueue
 
-A C extension for CPython 3.11 and later that stores incoming byte buffers as
-chunks and exposes them as one byte sequence. Appending and popping chunks take
-constant time and does not copy the underlying data.
+This is a Python >=3.11 project which implements a "memory queue".
+
+The memory queue is a container that presents chunks of data as a contiguous
+sequence.
+
+This can be useful when parsing streaming data. Typically the data is read in
+blocks of equal size until the token is found. This leads to a lot of copying.
+
+```python
+data += buf
+i = data.index(b`\n\r')
+if i != -1:
+    line = data[:i+2]
+    data = data[i+2:]
+```
 
 ## Example
 

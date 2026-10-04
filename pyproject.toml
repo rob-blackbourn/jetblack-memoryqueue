@@ -11,6 +11,10 @@ dev = [
     "pytest",
     "mypy",
 ]
+build = [
+    "auditwheel",
+    "build",
+]
 
 [project.urls]
 Repository = "https://github.com/rob-blackbourn/jetblack-memoryqueue"
