@@ -233,6 +233,14 @@ static PyObject *queue_append(Queue *self, PyObject *obj)
     Py_RETURN_NONE;
 }
 
+static PyObject *queue_inplace_add(PyObject *self, PyObject *obj)
+{
+    PyObject *result = queue_append((Queue *)self, obj);
+    if (!result) return NULL;
+    Py_DECREF(result);
+    return Py_NewRef(self);
+}
+
 static PyObject *queue_popleft(Queue *self, PyObject *unused)
 {
     LOCK(self);
@@ -678,6 +686,7 @@ static PyType_Slot type_slots[] = {
     {Py_tp_clear, queue_clear}, {Py_tp_methods, methods}, {Py_tp_getset, getsets},
     {Py_tp_iter, queue_iter}, {Py_tp_richcompare, queue_compare},
     {Py_tp_hash, PyObject_HashNotImplemented},
+    {Py_nb_inplace_add, queue_inplace_add},
     {Py_mp_length, queue_length}, {Py_mp_subscript, queue_subscript},
     {Py_sq_contains, queue_contains}, {Py_bf_getbuffer, queue_getbuffer},
     {0, NULL}

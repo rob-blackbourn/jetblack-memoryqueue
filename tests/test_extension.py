@@ -127,6 +127,41 @@ def test_invalid_input_and_reinitialization():
         queue.popleft()
 
 
+@pytest.mark.parametrize('buf', [b'abc', bytearray(b'abc'), memoryview(b'abc'),
+                                 b'', memoryview(b'a_b_c')[::2]])
+def test_inplace_add(buf):
+    queue = memoryqueue(b'first')
+    alias = queue
+    queue += buf
+    assert queue is alias
+    assert bytes(queue) == b'first' + bytes(buf)
+    assert len(queue) == 5 + len(buf)
+    assert [bytes(chunk) for chunk in queue.items()] == [b'first', bytes(buf)]
+    assert queue.popleft().tobytes() == b'first'
+    assert queue.popleft().tobytes() == bytes(buf)
+
+
+def test_inplace_add_shares_buffer():
+    source = bytearray(b'a_b_c')
+    queue = memoryqueue()
+    queue += memoryview(source)[::2]
+    source[2] = ord('B')
+    assert bytes(queue) == b'aBc'
+    assert next(queue.items()).strides == (2,)
+    assert queue.__iadd__(b'!') is queue
+
+
+@pytest.mark.parametrize('buf', ['text', object(), [b'abc'],
+                                 memoryview(b'abcd').cast('H')])
+def test_inplace_add_invalid_input(buf):
+    queue = memoryqueue(b'original')
+    alias = queue
+    with pytest.raises(TypeError):
+        queue += buf
+    assert queue is alias
+    assert [bytes(chunk) for chunk in queue.items()] == [b'original']
+
+
 def test_concurrent_append_pop_and_snapshots():
     queue = memoryqueue()
     barrier = Barrier(8)
