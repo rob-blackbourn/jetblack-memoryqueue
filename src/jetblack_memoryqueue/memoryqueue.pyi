@@ -124,6 +124,13 @@ class memoryqueue:
             True if the item occurs in the queued data, otherwise False.
         """
 
+    def __iadd__(self, buf: bytes | bytearray | memoryview, /) -> memoryqueue:
+        """Append a buffer without copying its data and return this queue.
+
+        Accept the same buffers as append, preserving their chunk boundaries.
+        Changes to mutable buffers are visible through the queue.
+        """
+
     def append(self, buf: bytes | bytearray | memoryview, /) -> None:
         """Append the specified buffer to the end of the queue.
 
